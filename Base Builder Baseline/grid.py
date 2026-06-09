@@ -87,7 +87,9 @@ class GridWorld:
             30: (120, 120, 130),# Ore
             33: (50, 200, 50),  # Marked Forest
             34: (180, 180, 190),# Marked Ore
-            20: (139, 0, 0)
+            20: (139, 0, 0),
+            21: (0, 200, 200),  # Clinic Blueprint
+            22: (0, 200, 200)   # Clinic Built
         }
         
         # UI brush definitions
@@ -101,6 +103,7 @@ class GridWorld:
             {"id": 4, "name": "Tower", "places": 14, "color": self.colors[14], "w": 2, "h": 2, "cost": {"Wood": 100, "Ore": 50}},
             {"id": 5, "name": "Barracks", "places": 15, "color": self.colors[15], "w": 2, "h": 4, "cost": {"Wood": 150, "Food": 50}},
             {"id": 6, "name": "Range", "places": 16, "color": self.colors[16], "w": 2, "h": 6, "cost": {"Wood": 80}},
+            {"id": 21, "name": "Clinic", "places": 21, "color": self.colors[21], "w": 2, "h": 2, "cost": {"Wood": 120, "Food": 80}},
             {"id": 33, "name": "Harvest", "places": 33, "color": self.colors[33], "w": 1, "h": 1, "cost": {}}
         ]
         
@@ -243,7 +246,7 @@ class GridWorld:
     def handle_left_ui_click(self, y):
         if self.selected_tile and self.selected_tile in self.active_buildings:
             b_data = self.active_buildings[self.selected_tile]
-            if b_data["type"] in ("COMMAND", "BARRACKS"):
+            if b_data["type"] in ("COMMAND", "BARRACKS", "CLINIC"):
                 if 50 <= y <= 90:
                     lvl = b_data.get("level", 1)
                     cost = {"Wood": 100 * lvl}
@@ -321,8 +324,8 @@ class GridWorld:
             cy = (row + 1) * self.logical_cell_size
             self.base_cmd_pos = (cx, cy)
             self.entity_manager.spawn_initial(cx, cy + self.logical_cell_size)
-        elif places_id == 15: # Barracks
-            self.grid[col][row] = 15 # Blueprint
+        elif places_id in (15, 21): # Barracks, Clinic
+            self.grid[col][row] = places_id # Blueprint
         else:
             self.grid[col][row] = places_id
         
@@ -354,7 +357,7 @@ class GridWorld:
             lvl_text = small_font.render(f"Level: {lvl}", True, (200, 200, 200))
             self.screen.blit(lvl_text, (10, start_y))
             
-            if t_type in ("COMMAND", "BARRACKS"):
+            if t_type in ("COMMAND", "BARRACKS", "CLINIC"):
                 start_y += 20
                 cost = {"Wood": 100 * lvl}
                 pygame.draw.rect(self.screen, (60, 100, 60), (10, start_y, self.ui_width - 20, 40))

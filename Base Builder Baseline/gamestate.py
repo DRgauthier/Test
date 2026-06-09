@@ -33,6 +33,7 @@ class GameState:
         
         self.max_workers = 0
         self.max_combat = 0
+        self.max_medics = 2
 
     def update_cycle(self, dt, pawn_count, active_buildings):
         self.day_timer += dt
@@ -56,6 +57,7 @@ class GameState:
         # Recalculate capacities dynamically based on active buildings
         w_cap = 0
         c_cap = 0
+        m_cap = 0
         for key, b_data in active_buildings.items():
             lvl = b_data.get("level", 1)
             if b_data["type"] == "COMMAND":
@@ -63,9 +65,12 @@ class GameState:
                 c_cap += (2 + (lvl - 1) * 2) # Base Command provides 2 guards at Lv1
             elif b_data["type"] == "BARRACKS":
                 c_cap += (4 + (lvl - 1) * 4) # Lv1: 4, Lv2: 8, Lv3: 12
-                
+            elif b_data["type"] == "CLINIC":
+                m_cap += (2 + (lvl - 1) * 2)
+
         self.max_workers = w_cap
         self.max_combat = c_cap
+        self.max_medics = max(2, m_cap)
 
     def can_afford(self, costs):
         for res, amount in costs.items():

@@ -94,7 +94,7 @@ class Worker:
                     self.state = "HARVESTING"
                     self.build_duration = 8.0
                     self.build_timer = 0.0
-                elif blueprint_id in (11, 12, 14, 15, 16, 18, 19):
+                elif blueprint_id in (11, 12, 14, 15, 16, 18, 19, 21):
                     self.state = "WORKING"
                     if blueprint_id == 11: self.build_duration = 5.0
                     elif blueprint_id == 12: self.build_duration = 3.0
@@ -103,6 +103,7 @@ class Worker:
                     elif blueprint_id == 16: self.build_duration = 12.0
                     elif blueprint_id == 18: self.build_duration = 10.0
                     elif blueprint_id == 19: self.build_duration = 10.0
+                    elif blueprint_id == 21: self.build_duration = 15.0
                     self.build_timer = 0.0
                 else:
                     if key in health_map and health_map[key][0] < health_map[key][1]:
@@ -137,14 +138,19 @@ class Worker:
                             grid[key[0]][key[1]] = 91
                         self.state = "IDLE"
                         manager.release_escorts(self)
-                elif tile_id in (11, 12, 14, 15, 16, 18, 19):
+                elif tile_id in (11, 12, 14, 15, 16, 18, 19, 21):
                     self.build_timer += dt
                     if self.build_timer >= self.build_duration:
                         max_hp = 100
                         if tile_id == 11: grid[self.target_col][self.target_row] = 1; max_hp = 100
                         elif tile_id == 12: grid[self.target_col][self.target_row] = 2; max_hp = 80
                         elif tile_id == 14: grid[self.target_col][self.target_row] = 4; max_hp = 300
-                        elif tile_id == 15: grid[self.target_col][self.target_row] = 5; max_hp = 400
+                        elif tile_id == 15:
+                            grid[self.target_col][self.target_row] = 5; max_hp = 400
+                            active_buildings[key] = {"type": "BARRACKS", "level": 1}
+                        elif tile_id == 21:
+                            grid[self.target_col][self.target_row] = 22; max_hp = 250
+                            active_buildings[key] = {"type": "CLINIC", "level": 1}
                         elif tile_id == 16: grid[self.target_col][self.target_row] = 6; max_hp = 200
                         elif tile_id == 18: 
                             grid[self.target_col][self.target_row] = 8; max_hp = 150
@@ -502,10 +508,12 @@ class Raider:
                     pygame.draw.rect(surface, (0, 255, 0), (bx, by, bar_w * (self.hp/100.0), 4))
 
 
+
 class EntityManager:
     def __init__(self):
         self.workers = []
         self.combat_units = []
+        self.medics = []
         self.raiders = []
         self.respawn_queue = []
         self.has_spawned_initial = False
@@ -520,6 +528,8 @@ class EntityManager:
                 self.workers.append(Worker(px, py))
             for _ in range(4):
                 self.combat_units.append(CombatUnit(px, py))
+            for _ in range(2):
+                self.medics.append(Medic(px, py))
             self.has_spawned_initial = True
 
     def assign_escorts(self, worker):
@@ -541,7 +551,7 @@ class EntityManager:
         worker.escorts = []
 
     def get_pawn_count(self):
-        return len(self.workers) + len(self.combat_units)
+        return len(self.workers) + len(self.combat_units) + len(self.medics)
 
     def update(self, dt, grid, health_map, active_buildings, gamestate, cols, rows, base_cmd_pos):
         cell_size = 40
@@ -558,6 +568,14 @@ class EntityManager:
                         b_spawn = (c * 40 + 40, r * 40 + 40)
                         break
                 self.combat_units.append(CombatUnit(b_spawn[0], b_spawn[1]))
+            if len(self.medics) < gamestate.max_medics:
+                # Find a clinic to spawn from
+                m_spawn = base_cmd_pos
+                for (c, r), b_data in active_buildings.items():
+                    if b_data["type"] == "CLINIC":
+                        m_spawn = (c * 40 + 40, r * 40 + 40)
+                        break
+                self.medics.append(Medic(m_spawn[0], m_spawn[1]))
         
         # Respawns
         for req in self.respawn_queue[:]:
@@ -650,6 +668,8 @@ class EntityManager:
         for w in self.workers:
             w.update(dt, grid, health_map, active_buildings, gamestate, cols, rows, cell_size, self, base_cmd_pos)
             
+        for m in self.medics:
+            m.update(dt, self, base_cmd_pos)
         for c in self.combat_units:
             c.update(dt, base_cmd_pos, gamestate, self, active_buildings)
             
@@ -659,7 +679,89 @@ class EntityManager:
     def draw(self, surface, camera_x, camera_y, ui_offset, cell_size_ratio):
         for w in self.workers:
             w.draw(surface, camera_x, camera_y, ui_offset, cell_size_ratio)
+        for m in self.medics:
+            m.draw(surface, camera_x, camera_y, ui_offset, cell_size_ratio)
         for c in self.combat_units:
             c.draw(surface, camera_x, camera_y, ui_offset, cell_size_ratio)
         for r in self.raiders:
             r.draw(surface, camera_x, camera_y, ui_offset, cell_size_ratio)
+
+class Medic:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.speed = 100.0
+        self.state = "IDLE"
+        self.target = None
+        self.hp = 100
+
+    def update(self, dt, manager, base_cmd_pos):
+        if self.state == "IDLE":
+            # Find a target to heal
+            best_target = None
+            best_dist = float('inf')
+
+            for w in manager.workers:
+                if w.hp < 100:
+                    dist = math.hypot(w.x - self.x, w.y - self.y)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_target = w
+
+            for c in manager.combat_units:
+                if c.hp < 100:
+                    dist = math.hypot(c.x - self.x, c.y - self.y)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_target = c
+
+            if best_target:
+                self.target = best_target
+                self.state = "HEALING"
+            else:
+                # Wander around base
+                if base_cmd_pos:
+                    dx = base_cmd_pos[0] - self.x
+                    dy = base_cmd_pos[1] - self.y
+                    dist = math.hypot(dx, dy)
+                    if dist > 150.0:
+                        self.x += (dx / dist) * self.speed * dt
+                        self.y += (dy / dist) * self.speed * dt
+                    else:
+                        # random wander
+                        self.x += random.uniform(-1, 1) * self.speed * dt
+                        self.y += random.uniform(-1, 1) * self.speed * dt
+
+        elif self.state == "HEALING":
+            if not self.target or self.target.hp >= 100:
+                self.state = "IDLE"
+                self.target = None
+                return
+
+            dx = self.target.x - self.x
+            dy = self.target.y - self.y
+            dist = math.hypot(dx, dy)
+
+            if dist > 10.0:
+                self.x += (dx / dist) * self.speed * dt
+                self.y += (dy / dist) * self.speed * dt
+            else:
+                # Heal
+                self.target.hp = min(100, self.target.hp + 20.0 * dt)
+
+    def draw(self, surface, camera_x, camera_y, ui_offset, cell_size_ratio):
+        vx = self.x * cell_size_ratio
+        vy = self.y * cell_size_ratio
+        screen_x = vx - camera_x + ui_offset
+        screen_y = vy - camera_y
+
+        if screen_x > ui_offset - 20 and screen_x < surface.get_width() + 20:
+            if screen_y > -20 and screen_y < surface.get_height() + 20:
+                pygame.draw.circle(surface, (0, 255, 255), (int(screen_x), int(screen_y)), int(10 * cell_size_ratio))
+
+                if self.hp < 100:
+                    bar_w = 20 * cell_size_ratio
+                    bx = screen_x - bar_w / 2
+                    by = screen_y - 15 * cell_size_ratio
+                    pygame.draw.rect(surface, (255, 0, 0), (bx, by, bar_w, 4))
+                    pygame.draw.rect(surface, (0, 255, 0), (bx, by, bar_w * (self.hp/100.0), 4))
