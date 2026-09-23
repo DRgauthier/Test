@@ -1,0 +1,23 @@
+name: Supabase Anti-Pause Ping
+
+on:
+  schedule:
+    - cron: '0 0 */5 * *' # Runs at midnight every 5 days
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL is not set"
+            exit 1
+          fi
+
+          # We use psql to connect and run a simple query.
+          # The postgresql-client is pre-installed on ubuntu-latest runners.
+          psql "$SUPABASE_DB_URL" -c "SELECT 1;"
