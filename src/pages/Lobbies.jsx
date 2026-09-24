@@ -106,12 +106,14 @@ export function Lobbies({ user }) {
                   <p className="font-medium">Game {lobby.id.substring(0, 8)}</p>
                   <p className="text-sm text-gray-500">Status: {lobby.status}</p>
                 </div>
-                <button
-                  onClick={() => joinLobby(lobby.id)}
-                  className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-                >
-                  <Play size={16} /> {lobby.host_id === user.id || lobby.guest_id === user.id ? 'Rejoin' : 'Join'}
-                </button>
+                {lobby.status !== 'finished' && (
+                  <button
+                    onClick={() => joinLobby(lobby.id)}
+                    className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                  >
+                    <Play size={16} /> {lobby.host_id === user.id || lobby.guest_id === user.id ? 'Rejoin' : 'Join'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
