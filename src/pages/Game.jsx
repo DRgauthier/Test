@@ -5,6 +5,7 @@ import { BOARD_SIZE, BOARD_LAYOUT, MULTIPLIERS, createTileBag, drawTiles } from 
 import { isValidWord, getTileValue } from '../lib/wordValidation'
 import { validateAndScoreMove } from '../lib/scoring'
 import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 
 export function Game({ user }) {
   const { id } = useParams()
@@ -110,53 +111,152 @@ export function Game({ user }) {
       .eq('id', id)
   }
 
-  const handleCellClick = (row, col) => {
+  const handleCellPointerDown = (e, row, col) => {
     if (!isMyTurn) return;
+    if (!lobby.guest_id) return; // Wait for guest
 
-    // Prevent host from playing if guest hasn't joined (which causes nextTurn to be null and softlocks)
-    if (!lobby.guest_id) {
-      alert("Please wait for a guest to join before playing.");
-      return;
-    }
-
-    // Check if there's already a placed tile here in current turn
     const existingPlacementIndex = placedTiles.findIndex(pt => pt.row === row && pt.col === col);
 
+    const now = Date.now();
+    const isDoubleTap = (now - lastTapTime) < 300;
+    setLastTapTime(now);
+
     if (existingPlacementIndex !== -1) {
-      // Pick it back up
-      const placement = placedTiles[existingPlacementIndex];
-      setPlacedTiles(placedTiles.filter((_, i) => i !== existingPlacementIndex));
-      setSelectedTile(placement.rackIndex);
-      return;
-    }
-
-    // Must not be an already finalized tile on board
-    if (gameState.board[row][col] !== null) return;
-
-    // Place tile
-    if (selectedTile !== null) {
-      let letter = myRack[selectedTile];
-      if (letter === null) return; // Already placed
-
-      if (letter === '_') {
-        const choice = prompt("Enter the letter this blank tile represents:");
-        if (!choice || choice.length !== 1 || !/[a-zA-Z]/.test(choice)) {
-          alert("Invalid letter.");
-          return;
-        }
-        // Store as lowercase to identify it as a blank in scoring
-        letter = choice.toLowerCase();
+      // If double tap on a locally placed tile, recall it
+      if (isDoubleTap) {
+        setPlacedTiles(placedTiles.filter((_, i) => i !== existingPlacementIndex));
+        setSelectedTile(null);
+        return;
       }
 
-      setPlacedTiles([...placedTiles, { row, col, letter, rackIndex: selectedTile }]);
-      setSelectedTile(null);
+      // Start dragging a locally placed tile from the board
+      const placement = placedTiles[existingPlacementIndex];
+      e.target.setPointerCapture(e.pointerId);
+
+      // Calculate offset relative to the center of the tile
+      const rect = e.target.getBoundingClientRect();
+      const offsetX = e.clientX - (rect.left + rect.width / 2);
+      const offsetY = e.clientY - (rect.top + rect.height / 2);
+
+      setDraggedTile({
+        rackIndex: placement.rackIndex,
+        offsetX,
+        offsetY,
+        currentX: e.clientX,
+        currentY: e.clientY,
+        sourceRow: row,
+        sourceCol: col,
+        width: rect.width,
+        height: rect.height,
+        letter: placement.letter
+      });
+
+      // Remove it temporarily from board while dragging
+      setPlacedTiles(placedTiles.filter((_, i) => i !== existingPlacementIndex));
+      return;
+    } else {
+      // If clicking an empty cell while a tile is selected from the rack
+      if (selectedTile !== null && gameState.board[row][col] === null) {
+        let letter = myRack[selectedTile];
+        if (letter === null) return;
+
+        if (letter === '_') {
+          const choice = prompt("Enter the letter this blank tile represents:");
+          if (!choice || choice.length !== 1 || !/[a-zA-Z]/.test(choice)) {
+            alert("Invalid letter.");
+            return;
+          }
+          letter = choice.toLowerCase();
+        }
+
+        setPlacedTiles([...placedTiles, { row, col, letter, rackIndex: selectedTile }]);
+        setSelectedTile(null);
+      }
     }
   }
 
-  const handleRackClick = (index) => {
+  const handleRackPointerDown = (e, index) => {
     if (!isMyTurn) return;
     if (myRack[index] === null) return; // Tile is placed on board
+
+    // Tap to select / unselect
     setSelectedTile(selectedTile === index ? null : index);
+
+    // Setup for drag
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetX = e.clientX - (rect.left + rect.width / 2);
+    const offsetY = e.clientY - (rect.top + rect.height / 2);
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    let letter = myRack[index];
+    if (letter === '_') {
+       // if we want blank tiles to be drag and droppable without immediately prompting,
+       // we can handle the prompt on drop, but for now we'll handle the simplest case.
+       // It's probably better to keep dragging simple for blanks as is.
+    }
+
+    setDraggedTile({
+      rackIndex: index,
+      offsetX,
+      offsetY,
+      currentX: e.clientX,
+      currentY: e.clientY,
+      width: rect.width,
+      height: rect.height,
+      letter: myRack[index]
+    });
+  }
+
+  const handlePointerMove = (e) => {
+    if (!draggedTile) return;
+    setDraggedTile({
+      ...draggedTile,
+      currentX: e.clientX,
+      currentY: e.clientY
+    });
+  }
+
+  const handlePointerUp = (e) => {
+    if (!draggedTile) return;
+
+    e.target.releasePointerCapture(e.pointerId);
+
+    // Find if dropped on a valid cell
+    const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+    let droppedOnCell = false;
+
+    if (dropTarget) {
+      const cellData = dropTarget.closest('[data-row][data-col]');
+      if (cellData) {
+        const row = parseInt(cellData.getAttribute('data-row'), 10);
+        const col = parseInt(cellData.getAttribute('data-col'), 10);
+
+        // Ensure no existing tile there
+        const existingPlacementIndex = placedTiles.findIndex(pt => pt.row === row && pt.col === col);
+        if (existingPlacementIndex === -1 && gameState.board[row][col] === null) {
+           let letterToDrop = draggedTile.letter;
+
+           if (letterToDrop === '_') {
+             const choice = prompt("Enter the letter this blank tile represents:");
+             if (choice && choice.length === 1 && /[a-zA-Z]/.test(choice)) {
+               letterToDrop = choice.toLowerCase();
+             } else {
+               alert("Invalid letter. Tile returned to rack.");
+               // Let it return to rack
+               setDraggedTile(null);
+               return;
+             }
+           }
+
+           setPlacedTiles([...placedTiles, { row, col, letter: letterToDrop, rackIndex: draggedTile.rackIndex }]);
+           droppedOnCell = true;
+           setSelectedTile(null); // Deselect on drop
+        }
+      }
+    }
+
+    setDraggedTile(null);
   }
 
   const handleRecall = () => {
@@ -335,12 +435,32 @@ export function Game({ user }) {
   // Determine emails to display if possible (since we don't have them in game_state, we can just use ID substrings or "Host/Guest" if email isn't readily available without another join, but user requested 3 letters. Assuming we can't easily fetch guest email synchronously here without modifying schema, we'll just show 'Host' / 'Guest' if we don't have it, but for 'You' we can show it)
 
   return (
-    <div className="min-h-screen bg-stone-100 p-4">
+    <div className="min-h-screen bg-stone-100 p-4"
+         onPointerMove={handlePointerMove}
+         onPointerUp={handlePointerUp}
+         onPointerCancel={handlePointerUp}>
+
+      {/* Dragged tile overlay */}
+      {draggedTile && (
+        <div
+          className="fixed pointer-events-none z-50 flex items-center justify-center bg-amber-100 border-2 border-blue-500 shadow-lg ring-4 ring-blue-300 font-bold text-xl"
+          style={{
+            left: draggedTile.currentX - draggedTile.width / 2,
+            top: draggedTile.currentY - draggedTile.height / 2,
+            width: draggedTile.width,
+            height: draggedTile.height
+          }}
+        >
+          <span>{draggedTile.letter.toUpperCase()}</span>
+          <span className="absolute bottom-0.5 right-0.5 text-[10px] text-stone-600">{getTileValue(draggedTile.letter)}</span>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-8">
 
         {/* Left Column - Board */}
-        <div className="flex-1">
-          <div className="mb-4 flex justify-between items-center bg-white p-4 rounded shadow">
+        <div className="flex-1 flex flex-col h-full max-h-[80vh] md:max-h-none overflow-hidden relative">
+          <div className="mb-4 flex justify-between items-center bg-white p-4 rounded shadow shrink-0">
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
@@ -352,8 +472,17 @@ export function Game({ user }) {
             </div>
           </div>
 
-          <div className="bg-white p-2 rounded shadow inline-block">
-            <div className="grid grid-cols-15 gap-1 border-2 border-stone-800 bg-stone-800 p-1" style={{gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`}}>
+          <div className="bg-white p-2 rounded shadow flex-1 overflow-hidden relative flex justify-center touch-none">
+            <TransformWrapper
+              initialScale={1}
+              minScale={0.5}
+              maxScale={4}
+              centerOnInit={true}
+              wheel={{ step: 0.1 }}
+              panning={{ velocityDisabled: true }}
+            >
+              <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full flex items-center justify-center">
+                <div className="grid gap-1 border-2 border-stone-800 bg-stone-800 p-1 select-none" style={{gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`, minWidth: '600px', maxWidth: '800px', width: '100%', aspectRatio: '1/1'}}>
               {gameState.board.map((row, rIndex) => (
                 row.map((cell, cIndex) => {
                   const multiplier = BOARD_LAYOUT[rIndex][cIndex];
@@ -364,7 +493,7 @@ export function Game({ user }) {
                   return (
                     <div
                       key={`${rIndex}-${cIndex}`}
-                      className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center relative font-bold text-lg cursor-pointer
+                      className={`flex items-center justify-center relative font-bold text-lg cursor-pointer w-full h-full aspect-square
                         ${displayLetter ? 'bg-amber-100 border-2 border-amber-300' : getMultiplierColor(multiplier)}
                         ${isLocallyPlaced ? 'ring-2 ring-blue-500' : ''}
                       `}
@@ -383,7 +512,9 @@ export function Game({ user }) {
                   )
                 })
               ))}
-            </div>
+                </div>
+              </TransformComponent>
+            </TransformWrapper>
           </div>
         </div>
 
