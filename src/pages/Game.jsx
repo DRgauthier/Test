@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { BOARD_SIZE, BOARD_LAYOUT, MULTIPLIERS, createTileBag, drawTiles } from '../lib/gameLogic'
 import { isValidWord, getTileValue } from '../lib/wordValidation'
 import { validateAndScoreMove } from '../lib/scoring'
-import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Check, XCircle } from 'lucide-react'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 
 export function Game({ user }) {
@@ -30,6 +30,11 @@ export function Game({ user }) {
         setGameState(payload.new.game_state)
         // Clear local placed tiles if state changes from remote
         setPlacedTiles([])
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'lobbies', filter: `id=eq.${id}` }, () => {
+        // If lobby deleted by host, force guest to leave
+        alert("The host has closed the game.");
+        navigate('/');
       })
       .subscribe()
 
@@ -264,6 +269,19 @@ export function Game({ user }) {
     setSelectedTile(null);
   }
 
+  const handleCloseGame = async () => {
+    if (!isHost) return;
+    const confirmClose = window.confirm("Are you sure you want to close this game? It will be deleted for both players.");
+    if (!confirmClose) return;
+
+    await supabase
+      .from('lobbies')
+      .delete()
+      .eq('id', id);
+
+    navigate('/');
+  }
+
   const handleSubmitTurn = async () => {
     if (!isMyTurn || placedTiles.length === 0) return;
 
@@ -394,7 +412,7 @@ export function Game({ user }) {
   }
 
 
-  if (loading || !gameState) {
+  if (loading || !gameState || Object.keys(gameState).length === 0 || !gameState.players) {
     return <div className="p-8 text-center">Loading game...</div>
   }
 
@@ -461,12 +479,22 @@ export function Game({ user }) {
         {/* Left Column - Board */}
         <div className="flex-1 flex flex-col h-full max-h-[80vh] md:max-h-none overflow-hidden relative">
           <div className="mb-4 flex justify-between items-center bg-white p-4 rounded shadow shrink-0">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft size={20} /> Leave
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft size={20} /> Leave
+              </button>
+              {isHost && (
+                <button
+                  onClick={handleCloseGame}
+                  className="flex items-center gap-2 text-red-600 hover:text-red-800"
+                >
+                  <XCircle size={20} /> Close Game
+                </button>
+              )}
+            </div>
             <div className="font-bold text-lg">
               {isMyTurn ? <span className="text-green-600">Your Turn</span> : <span className="text-gray-500">Opponent's Turn</span>}
             </div>
