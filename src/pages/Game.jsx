@@ -111,6 +111,16 @@ export function Game({ user }) {
       .eq('id', id)
   }
 
+  const handleForfeit = async () => {
+    if (window.confirm("Are you sure you want to forfeit? This will end the game for both players.")) {
+      await supabase
+        .from('lobbies')
+        .update({ status: 'finished' })
+        .eq('id', id)
+      navigate('/')
+    }
+  }
+
   const handleCellPointerDown = (e, row, col) => {
     if (!isMyTurn) return;
     if (!lobby.guest_id) return; // Wait for guest
@@ -394,8 +404,23 @@ export function Game({ user }) {
   }
 
 
-  if (loading || !gameState) {
+  if (loading || !gameState || !gameState.board || !lobby) {
     return <div className="p-8 text-center">Loading game...</div>
+  }
+
+  if (lobby.status === 'finished') {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-stone-100">
+        <h2 className="text-3xl font-bold mb-4 text-gray-800">Game Over</h2>
+        <p className="text-gray-600 mb-8">This game has been finished or forfeited.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 shadow"
+        >
+          Return to Main Menu
+        </button>
+      </div>
+    )
   }
 
   const isMyTurn = gameState.turn === user.id;
@@ -461,12 +486,20 @@ export function Game({ user }) {
         {/* Left Column - Board */}
         <div className="flex-1 flex flex-col h-full max-h-[80vh] md:max-h-none overflow-hidden relative">
           <div className="mb-4 flex justify-between items-center bg-white p-4 rounded shadow shrink-0">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft size={20} /> Leave
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft size={20} /> Main Menu
+              </button>
+              <button
+                onClick={handleForfeit}
+                className="flex items-center gap-2 text-red-600 hover:text-red-800"
+              >
+                Forfeit
+              </button>
+            </div>
             <div className="font-bold text-lg">
               {isMyTurn ? <span className="text-green-600">Your Turn</span> : <span className="text-gray-500">Opponent's Turn</span>}
             </div>
