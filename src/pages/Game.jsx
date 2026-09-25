@@ -404,7 +404,7 @@ export function Game({ user }) {
   }
 
 
-  if (loading || !gameState || !gameState.board || !lobby) {
+  if (loading || !gameState || !gameState.board || !gameState.players || !lobby) {
     return <div className="p-8 text-center">Loading game...</div>
   }
 
