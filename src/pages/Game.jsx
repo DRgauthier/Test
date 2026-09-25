@@ -19,6 +19,8 @@ export function Game({ user }) {
   // Local state for current turn
   const [selectedTile, setSelectedTile] = useState(null) // index in rack
   const [placedTiles, setPlacedTiles] = useState([]) // [{row, col, letter, rackIndex}]
+  const [draggedTile, setDraggedTile] = useState(null)
+  const [lastTapTime, setLastTapTime] = useState(0)
 
   useEffect(() => {
     fetchLobbyAndGame()
@@ -501,7 +503,7 @@ export function Game({ user }) {
                         ${displayLetter ? 'bg-amber-100 border-2 border-amber-300' : getMultiplierColor(multiplier)}
                         ${isLocallyPlaced ? 'ring-2 ring-blue-500' : ''}
                       `}
-                      onClick={() => handleCellClick(rIndex, cIndex)}
+                      onPointerDown={(e) => handleCellPointerDown(e, rIndex, cIndex)}
                     >
                       {!displayLetter && multiplier && (
                         <span className="text-[10px] text-stone-700 opacity-70 font-sans">{getMultiplierText(multiplier)}</span>
@@ -551,7 +553,7 @@ export function Game({ user }) {
                 {myRack.map((letter, i) => (
                   <div
                     key={i}
-                    onClick={() => handleRackClick(i)}
+                    onPointerDown={(e) => handleRackPointerDown(e, i)}
                     className={`w-10 h-12 flex items-center justify-center relative font-bold text-xl cursor-pointer border-2 rounded shadow-sm
                       ${letter === null ? 'opacity-0' : 'bg-amber-100'}
                       ${selectedTile === i ? 'border-blue-500 ring-2 ring-blue-200 -translate-y-2' : 'border-amber-300'}
