@@ -52,37 +52,8 @@ export function Game({ user }) {
 
     setLobby(data)
     setIsHost(data.host_id === user.id)
-
-    // Initialize game state if empty and we are host
-    if (Object.keys(data.game_state).length === 0 && data.host_id === user.id) {
-      initializeGame(data)
-    } else {
-      setGameState(data.game_state)
-    }
-
+    setGameState(data.game_state)
     setLoading(false)
-  }
-
-  const initializeGame = async (lobbyData) => {
-    const bag = createTileBag()
-    const hostTiles = drawTiles(bag, 7)
-    const guestTiles = lobbyData.guest_id ? drawTiles(bag, 7) : []
-
-    const initialState = {
-      board: Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)),
-      bag,
-      players: {
-        [lobbyData.host_id]: { score: 0, rack: hostTiles },
-        ...(lobbyData.guest_id ? { [lobbyData.guest_id]: { score: 0, rack: guestTiles } } : {})
-      },
-      turn: lobbyData.host_id,
-      history: []
-    }
-
-    await supabase
-      .from('lobbies')
-      .update({ game_state: initialState })
-      .eq('id', id)
   }
 
   // Effect to draw initial tiles for guest when they join

@@ -38,7 +38,7 @@ export function Lobbies({ user }) {
       .select()
 
     if (!error && data) {
-      navigate(`/game/${data[0].id}`)
+      navigate(`/lobby/${data[0].id}`)
     }
   }
 
@@ -50,10 +50,10 @@ export function Lobbies({ user }) {
       .is('guest_id', null)
 
     if (!error) {
-      navigate(`/game/${lobbyId}`)
+      navigate(`/lobby/${lobbyId}`)
     } else {
       // Might already be joined or full
-      navigate(`/game/${lobbyId}`)
+      navigate(`/lobby/${lobbyId}`)
     }
   }
 
