@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import { Login } from './pages/Login'
 import { Lobbies } from './pages/Lobbies'
 import { Game } from './pages/Game'
+import { LobbyReady } from './pages/LobbyReady'
 
 function App() {
   const [session, setSession] = useState(null)
@@ -38,6 +39,10 @@ function App() {
         <Route
           path="/"
           element={session ? <Lobbies user={session.user} /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/lobby/:id"
+          element={session ? <LobbyReady user={session.user} /> : <Navigate to="/login" />}
         />
         <Route
           path="/game/:id"
